@@ -1,126 +1,122 @@
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
+import os
+for dirname, _, filenames in os.walk('C:\\Users\\mumtaz\\OneDrive\\Desktop\\internship project\\Movies Recommendation\\'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+
+movies = pd.read_csv('C:\\Users\\mumtaz\\OneDrive\\Desktop\\internship project\\Movies Recommendation\\tmdb_5000_movies.csv')
+credits = pd.read_csv('C:\\Users\\mumtaz\\OneDrive\\Desktop\\internship project\\Movies Recommendation\\tmdb_5000_credits.csv')
+
+movies.head(2)
+movies.shape
+credits.head()
+movies = movies.merge(credits,on='title')
+movies.head()
+# budget
+# homepage
+# id
+# original_language
+# original_title
+# popularity
+# production_comapny
+# production_countries
+# release-date(not sure)
+
+
+movies = movies[['movie_id','title','overview','genres','keywords','cast','crew']]
+movies.head()
+
+import ast
+def convert(text):
+    L = []
+    for i in ast.literal_eval(text):
+        L.append(i['name']) 
+    return L 
+
+
+movies.dropna(inplace=True)
+
+movies['genres'] = movies['genres'].apply(convert)
+movies.head()
+
+movies['keywords'] = movies['keywords'].apply(convert)
+movies.head()
+
+import ast
+ast.literal_eval('[{"id": 28, "name": "Action"}, {"id": 12, "name": "Adventure"}, {"id": 14, "name": "Fantasy"}, {"id": 878, "name": "Science Fiction"}]')
+def convert3(text):
+    L = []
+    counter = 0
+    for i in ast.literal_eval(text):
+        if counter < 3:
+            L.append(i['name'])
+        counter+=1
+    return L 
+
+movies['cast'] = movies['cast'].apply(convert)
+movies.head()
+movies['cast'] = movies['cast'].apply(lambda x:x[0:3])
+
+def fetch_director(text):
+    L = []
+    for i in ast.literal_eval(text):
+        if i['job'] == 'Director':
+            L.append(i['name'])
+    return L 
+
+
+movies['crew'] = movies['crew'].apply(fetch_director)
+movies.sample(5)
+
+
+def collapse(L):
+    L1 = []
+    for i in L:
+        L1.append(i.replace(" ",""))
+    return L1
+
+
+movies['cast'] = movies['cast'].apply(collapse)
+movies['crew'] = movies['crew'].apply(collapse)
+movies['genres'] = movies['genres'].apply(collapse)
+movies['keywords'] = movies['keywords'].apply(collapse)
+
+movies.head()
+
+movies['overview'] = movies['overview'].apply(lambda x:x.split())
+movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
+
+new = movies.drop(columns=['overview','genres','keywords','cast','crew'])
+new['tags'] = new['tags'].apply(lambda x: " ".join(x))
+new.head()
+
+from sklearn.feature_extraction.text import CountVectorizer
+cv = CountVectorizer(max_features=5000,stop_words='english')
+
+vector = cv.fit_transform(new['tags']).toarray()
+vector.shape
+
+from sklearn.metrics.pairwise import cosine_similarity
+similarity = cosine_similarity(vector)
+similarity
+new[new['title'] == 'The Lego Movie'].index[0]
+def recommend(movie):
+    index = new[new['title'] == movie].index[0]
+    distances = sorted(list(enumerate(similarity[index])),reverse=True,key = lambda x: x[1])
+    for i in distances[1:6]:
+        print(new.iloc[i[0]].title)
+
+
+recommend('Superman')
+
 import pickle
-
-data = pd.read_csv("C:\\Users\\mumtaz\\OneDrive\\Desktop\\internship project\\House Price prediction\\bengaluru_house_prices.csv")
-print(data.head())
-print(data.shape)
-print(data.info())
-
-data.isna().sum()
-data.drop(columns=['area_type', 'availability', 'society'],inplace=True)
-data.describe()
-data.info()
-
-data['location'].value_counts()
-data['location'] = data['location'].fillna('Sarjapur Road')
-data['size'].value_counts()
-data['size'] = data['size'].fillna('2 BHK')
-data['bath'] = data['bath'].fillna(data['bath'].median())
-data['balcony'] = data['balcony'].fillna(data['balcony'].median())
-data['size'] = data['size'].astype(str)
-data['bhk'] = data['size'].str.split().str.get(0).astype(float)
-data = data[data['bhk'] <= 20]
-data.info()
-
-def convertRange(x):
-    if '_' in str(x):
-        temp = x.split('_')
-        return(float(temp[0]) + float(temp[1]))/2
-    try:
-        return float(x)
-    except:
-        return None
-data['total_sqft'] = data['total_sqft'].apply(convertRange)
-data['price_per_sqft']= data['price']*100000 / data['total_sqft']
-data['price_per_sqft']
-data.describe()
-
-data['location'] = data['location'].apply(lambda x: x.strip())
-location_count = data['location'].value_counts()
-
-location_count_less_10 = location_count[location_count <= 10]
-
-data['location'] = data['location'].apply(lambda x: 'other' if x in location_count_less_10 else x)
-
-data = data[((data['total_sqft']/data['bhk']) >= 300 )]
-
-def remove_outliers_sqft(df):
-    df_output = pd.DataFrame()
-    for key, subdf in df.groupby('location'):
-        m = np.mean(subdf['price_per_sqft'])
-        st = np.std(subdf['price_per_sqft'])
-        gen_df = subdf[(subdf['price_per_sqft'] > (m - st)) & (subdf['price_per_sqft'] <= (m + st))]
-        df_output = pd.concat([df_output, gen_df], ignore_index=True)
-    return df_output
-
-data = remove_outliers_sqft(data)
-
-def bhk_outlier_remover(df):
-    exclude_indices = np.array([])
-    bhk_stats = {}
-    for location, location_df in df.groupby('location'):
-        for bhk, bhk_df in location_df.groupby('bhk'):
-            bhk_stats[bhk] = {
-                'mean': np.mean(bhk_df['price_per_sqft']),
-                'std': np.std(bhk_df['price_per_sqft']),
-                'count': bhk_df.shape[0]
-            }
-
-    for bhk, bhk_df in data.groupby('bhk'):
-        stats = bhk_stats.get(bhk - 1)
-        if stats and stats['count'] > 5:
-            exclude_indices = np.append(exclude_indices, bhk_df[bhk_df['price_per_sqft'] < (stats['mean'])].index.values)
-
-    return df.drop(exclude_indices, axis='index')
-
-data = bhk_outlier_remover(data)
-
-data.drop(columns=['size', 'price_per_sqft'], inplace=True)
-data.head()
+pickle.dump(new,open('movie_list.pkl','wb'))
+pickle.dump(similarity,open('similarity.pkl','wb'))
+pickle.dump(new.to_dict(),open('movie_dict.pkl','wb'))
+pickle.dump(similarity,open('similarity.pkl','wb'))
 
 
-data.to_csv("Cleaned_data.csv")
-X = data[['total_sqft', 'bath', 'balcony', 'bhk']]
-y = data['price']
-
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, Lasso,Ridge
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, PolynomialFeatures
-from sklearn.compose import make_column_transformer
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import r2_score
-
-X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.01, random_state=69)
-_, X_test, _, y_test = train_test_split(X,y, test_size=0.9, random_state=420)
-
-print(X_train.shape)
-print(X_test.shape)
+new.to_dict()
 
 
-# Create a preprocessor for numerical and categorical features
-numeric_transformer = numeric_transformer = make_pipeline(StandardScaler(), PolynomialFeatures(degree=1))
-categorical_transformer = OneHotEncoder(handle_unknown='ignore')
-preprocessor = make_column_transformer((numeric_transformer, ['total_sqft', 'bath', 'balcony']),
-                                       (categorical_transformer, ['bhk']))
-
-linear_pipeline = make_pipeline(preprocessor, LinearRegression())
-lasso_pipeline = make_pipeline(preprocessor, Lasso())
-ridge_pipeline = make_pipeline(preprocessor, Ridge())
-
-linear_pipeline.fit(X_train, y_train)
-linear_pred = linear_pipeline.predict(X_test)
-print('Linear Regression R^2:', r2_score(y_test, linear_pred))
-
-lasso_pipeline.fit(X_train, y_train)
-lasso_pred = lasso_pipeline.predict(X_test)
-print('Lasso Regression R^2:', r2_score(y_test, lasso_pred))
-
-ridge_pipeline.fit(X_train, y_train)
-ridge_pred = ridge_pipeline.predict(X_test)
-print('Ridge Regression R^2:', r2_score(y_test, ridge_pred))
-
-with open('ridge_model.pkl', 'wb') as file:
-    pickle.dump(ridge_pipeline, file)
